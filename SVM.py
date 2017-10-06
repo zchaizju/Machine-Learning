@@ -1,18 +1,18 @@
-
 # !/usr/bin/env python3
 # coding=utf-8
 """
 Support Vector Machine,SVM
-Author      :Chai Zheng
-Blog        :http://blog.csdn.net/chai_zheng/
-Github      :https://github.com/Chai-Zheng/Machine-Learning
-Email       :zchaizju@gmail.com
-Date        :2017.10.3
+Author  :Chai Zheng
+Blog    :http://blog.csdn.net/chai_zheng/
+Github  :https://github.com/Chai-Zheng/Machine-Learning
+Email   :zchaizju@gmail.com
+Date    :2017.10.3
 """
 
-import numpy as np
 import time
+import numpy as np
 import matplotlib.pyplot as plt
+from sklearn import preprocessing
 
 class SVM():
     def __init__(self,dataset,labels,C,toler,kernelOption):
@@ -29,17 +29,17 @@ class SVM():
 
 def calcKernelValue(matrix_x,sample_x,kernelOption):
     kernelType = kernelOption[0]
-    sigma = kernelOption[1]
     numSamples = matrix_x.shape[0]
-    kernelValue = np.zeros((numSamples,1))
+    kernelValue = np.zeros((1,numSamples))
     if kernelType == 'linear':
             kernelValue = np.dot(matrix_x,sample_x.T)
     elif kernelType == 'rbf':
+            sigma = kernelOption[1]
             if sigma == 0:
                 sigma =1
             for i in range(numSamples):
                 diff = matrix_x[i,:] - sample_x
-                kernelValue[i] = np.exp(np.dot(diff,diff.T)/(-2.0*sigma**2))
+                kernelValue[0,i] = np.exp((np.dot(diff,diff.T)/(-2.0*sigma**2)))
     else:
         raise NameError('Not support kernel type! You should use linear or rbf!')
     return kernelValue
@@ -48,7 +48,7 @@ def calcKernelMatrix(train_x,kernelOption):
     numSamples = train_x.shape[0]
     kernelMatrix = np.zeros((numSamples,numSamples))
     for i in range(numSamples):
-        kernelMatrix[:,i] = calcKernelValue(train_x,train_x[i,:],kernelOption)
+        kernelMatrix[i,:] = calcKernelValue(train_x,train_x[i,:],kernelOption)
     return kernelMatrix
 
 def calcError(svm,alpha_k):     #计算第k个样本的误差，k∈[1，m]
@@ -60,13 +60,13 @@ def updateError(svm,alpha_k):   #更新误差
     error = calcError(svm,alpha_k)
     svm.errorCache[alpha_k] = [1,error]
 
-def innerLoop(svm,alpha_1,error_1): #内循环，根据alpha1确定alpha2
+def innerLoop(svm,alpha_1,error_1,train_x): #内循环，根据alpha1确定alpha2
     svm.errorCache[alpha_1] =[1,error_1]
     candidateAlphaList = np.nonzero(svm.errorCache[:,0])[0]
     maxStep = 0
     alpha_2 = 0
     error_2 = 0
-
+    numSample = train_x.shape[0]
     if len(candidateAlphaList)>1:
         #找出|E2-E1|最大的alpha2
         for alpha_k in candidateAlphaList:
@@ -78,11 +78,21 @@ def innerLoop(svm,alpha_1,error_1): #内循环，根据alpha1确定alpha2
                 alpha_2 = alpha_k
                 error_2 = error_k
     else:   #第一次进入，随机选择alpha2
-        alpha_2 = np.random.randint(svm.numSamples)
+        # while alpha_2 == alpha_1:   #alpha_2不能等于alpha_1
+        #     alpha_2 = np.random.randint(svm.numSamples)
+        # error_2 = calcError(svm,alpha_2)
+
+        #其实本来应该按上述方式随机选择alpha_2，但我在测试葡萄酒数据集的时候发现随机选择alpha2是造成
+        #分类精度高低悬殊的主要原因，采用下面的方法来初始化alpha_2的位置，可将分类结果稳定至97%附近
+        if alpha_1 == numSample:
+            alpha_2 = numSample - 1
+        else:
+            alpha_2 = alpha_1 + 1
         error_2 = calcError(svm,alpha_2)
+
     return alpha_2,error_2
 
-def outsideLoop(svm,alpha_1):
+def outsideLoop(svm,alpha_1,train_x):
     error_1 = calcError(svm,alpha_1)
 
     #检查alpha_1是否违背KKT条件
@@ -91,7 +101,7 @@ def outsideLoop(svm,alpha_1):
             or((svm.train_y[alpha_1]*error_1>svm.toler) and (svm.alphas[alpha_1]>0)):
 
         #固定alpha1，求alpha2
-        alpha_2,error_2 = innerLoop(svm,alpha_1,error_1)
+        alpha_2,error_2 = innerLoop(svm,alpha_1,error_1,train_x)
         alpha_1_old = svm.alphas[alpha_1].copy()    #拷贝，分配新的内存
         alpha_2_old = svm.alphas[alpha_2].copy()
 
@@ -153,10 +163,10 @@ def SVMtrain(train_x,train_y,C,toler,maxIter,kernelOption=('rbf',1.0)):
         SupportAlphaList = np.nonzero((svm.alphas>0)*(svm.alphas<svm.C))[0] #支撑向量序号列表
 
         for i in SupportAlphaList:          #遍历支持向量
-            alphaPairsChanged += outsideLoop(svm,i)
+            alphaPairsChanged += outsideLoop(svm,i,train_x)
 
         for i in range(svm.numSamples):     #遍历所有样本
-            alphaPairsChanged += outsideLoop(svm,i)
+            alphaPairsChanged += outsideLoop(svm,i,train_x)
 
         iterCount += 1
 
@@ -168,13 +178,13 @@ def SVMtest(svm,test_x,test_y):
     matchCount = 0
     for i in range(numTestSamples):
         kernelValue = calcKernelValue(svm.train_x,test_x[i,:],svm.kernelOpt)
-        predict = np.dot(kernelValue.T,svm.train_y*svm.alphas)+svm.b
+        predict = np.dot(kernelValue,svm.train_y*svm.alphas)+svm.b
         if np.sign(predict) == np.sign(test_y[i]):
             matchCount += 1
     accuracy = float(matchCount/numTestSamples)
     return accuracy
 
-def SVMvisible(svm):
+def SVMvisible(svm):    #仅针对二变量样本可视化，即被注释掉的训练数据，非葡萄酒数据
     w = np.zeros((2,1))
     for i in range(svm.numSamples):
         if svm.train_y[i] == -1:
@@ -195,14 +205,36 @@ def SVMvisible(svm):
 
 if __name__ =='__main__':
 
-    print('Step 1.Loading data...') #构建10个训练样本，6个测试样本，线性可分
-    train_data = np.array([[2.95,6.63,1],[2.53,7.79,1],[3.57,5.65,1],[2.16,6.22,-1],[3.27,3.52,-1],[3,7,1],[3,8,1],[3,2,-1],[2,9,1],[2,4,-1]])
-    test_data = np.array([[3.16,5.47,1],[2.58,4.46,-1],[2,2,-1],[3,4,-1],[5,100,1],[6,1000,1]])
+    print('Step 1.Loading data...')
+    #构建10个训练样本，6个测试样本，线性可分,若采用被注释的数据，可将本程序的最后一行取消注释，从而可视化结果
+    # train_data = np.array([[2.95,6.63,1],[2.53,7.79,1],[3.57,5.65,1],[2.16,6.22,-1],[3.27,3.52,-1],[3,7,1],[3,8,1],[3,2,-1],[2,9,1],[2,4,-1]])
+    # test_data = np.array([[3.16,5.47,1],[2.58,4.46,-1],[2,2,-1],[3,4,-1],[5,100,1],[6,1000,1]])
+    #
+    # train_x = train_data[:,0:2]
+    # train_y = train_data[:,2].reshape(10,1)
+    # test_x = test_data[:,0:2]
+    # test_y = test_data[:,2].reshape(6,1)
+    
+    #数据集下载http://download.csdn.net/download/chai_zheng/10009314
+    train_data = np.loadtxt("Wine_Train.txt",delimiter=',') #载入葡萄酒数据集
+    test_data = np.loadtxt("Wine_Test.txt",delimiter=',')
+    train_x = train_data[:,1:14]
+    scaler = preprocessing.StandardScaler().fit(train_x)    #数据标准化
+    train_y = train_data[:,0].reshape(65,1)
+    for i in range(len(train_y)):
+        if train_y[i] == 1:     #修改标签为±1
+            train_y[i] = -1
+        if train_y[i] == 2:
+            train_y[i] = 1
+    test_x = test_data[:,1:14]
+    test_x = scaler.transform(test_x)   #数据标准化
+    test_y = test_data[:,0].reshape(65,1)
+    for i in range(len(test_y)):
+        if test_y[i] == 1:
+            test_y[i] = -1
+        if test_y[i] == 2:
+            test_y[i] = 1
 
-    train_x = train_data[:,0:2]
-    train_y = train_data[:,2].reshape(10,1)
-    test_x = test_data[:,0:2]
-    test_y = test_data[:,2].reshape(6,1)
     print('---Loading completed.')
     print('Step 2.Training...')
     C = 0.6
@@ -212,4 +244,4 @@ if __name__ =='__main__':
     print('Step 3.Testing...')
     accuracy = SVMtest(svmClassifier,test_x,test_y)
     print('---Testing completed.Accuracy: %.3f%%'%(accuracy*100))
-    SVMvisible(svmClassifier)
+    # SVMvisible(svmClassifier)
