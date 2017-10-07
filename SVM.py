@@ -78,17 +78,16 @@ def innerLoop(svm,alpha_1,error_1,train_x): #内循环，根据alpha1确定alpha
                 alpha_2 = alpha_k
                 error_2 = error_k
     else:   #第一次进入，随机选择alpha2
-        # while alpha_2 == alpha_1:   #alpha_2不能等于alpha_1
-        #     alpha_2 = np.random.randint(svm.numSamples)
-        # error_2 = calcError(svm,alpha_2)
-
-        #其实本来应该按上述方式随机选择alpha_2，但我在测试葡萄酒数据集的时候发现随机选择alpha2是造成
-        #分类精度高低悬殊的主要原因，采用下面的方法来初始化alpha_2的位置，可将分类结果稳定至97%附近
-        if alpha_1 == numSample:
-            alpha_2 = numSample - 1
-        else:
-            alpha_2 = alpha_1 + 1
+        while alpha_2 == alpha_1:   #alpha_2不能等于alpha_1
+            alpha_2 = np.random.randint(svm.numSamples)
         error_2 = calcError(svm,alpha_2)
+
+        #采用下述方式来初始化alpha_2位置，可稳定结果。采用上述方法会稍微不稳定，但这是正常的。
+        # if alpha_1 == numSample:
+        #     alpha_2 = numSample - 1
+        # else:
+        #     alpha_2 = alpha_1 + 1
+        # error_2 = calcError(svm,alpha_2)
 
     return alpha_2,error_2
 
@@ -170,7 +169,7 @@ def SVMtrain(train_x,train_y,C,toler,maxIter,kernelOption=('rbf',1.0)):
 
         iterCount += 1
 
-    print('---Training Completed.Took %f s.'%((time.time()-startTime)))
+    print('---Training Completed.Took %f s.Using %s kernel.'%((time.time()-startTime),kernelOption[0]))
     return svm
 
 def SVMtest(svm,test_x,test_y):
@@ -214,12 +213,13 @@ if __name__ =='__main__':
     # train_y = train_data[:,2].reshape(10,1)
     # test_x = test_data[:,0:2]
     # test_y = test_data[:,2].reshape(6,1)
-    
+
     #数据集下载http://download.csdn.net/download/chai_zheng/10009314
     train_data = np.loadtxt("Wine_Train.txt",delimiter=',') #载入葡萄酒数据集
     test_data = np.loadtxt("Wine_Test.txt",delimiter=',')
     train_x = train_data[:,1:14]
-    scaler = preprocessing.StandardScaler().fit(train_x)    #数据标准化
+    scaler = preprocessing.StandardScaler().fit(train_x)
+    train_x = scaler.transform(train_x) #数据标准化
     train_y = train_data[:,0].reshape(65,1)
     for i in range(len(train_y)):
         if train_y[i] == 1:     #修改标签为±1
@@ -240,7 +240,7 @@ if __name__ =='__main__':
     C = 0.6
     toler = 0.001
     maxIter = 100
-    svmClassifier = SVMtrain(train_x,train_y,C,toler,maxIter,kernelOption=('linear',0))
+    svmClassifier = SVMtrain(train_x,train_y,C,toler,maxIter,kernelOption=('rbf',2))
     print('Step 3.Testing...')
     accuracy = SVMtest(svmClassifier,test_x,test_y)
     print('---Testing completed.Accuracy: %.3f%%'%(accuracy*100))
