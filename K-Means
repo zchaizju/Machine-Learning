@@ -1,0 +1,79 @@
+# !/usr/bin/env python3
+# coding=utf-8
+"""
+K-means
+Author  :Chai Zheng
+Blog    :http://blog.csdn.net/chai_zheng/
+Github  :https://github.com/Chai-Zheng/Machine-Learning
+Email   :zchaizju@gmail.com
+Date    :2017.10.8
+"""
+
+import random
+import numpy as np
+from sklearn import preprocessing
+
+#选择初始均值向量
+def selectInitMeanVec(Data,k):
+    indexInitMeanVec = random.sample(range(m),k)
+    initMeanVec = Data[indexInitMeanVec,:]
+    return initMeanVec
+
+#计算距离并归入簇中
+def calcDistance(Data,k,MeanVec):
+    Dist = np.zeros((k,1))
+    Label = np.zeros((m,1))
+    for i in range(m):
+        for j in range(k):
+            a = Data[i,:]-MeanVec[j,:]
+            Dist[j] = np.sqrt(sum(a**2))
+        Label[i] = np.argmin(Dist)
+    return Label
+
+#更新均值向量
+def updateMeanVec(Data,Label,k,oldMeanVec):
+    newMeanVec = np.zeros((k,n))
+    numSamples = np.zeros((k,1),dtype = int)
+    for i in range(k):
+        num = 0
+        D = np.zeros((k,0))
+        for j in range(m):
+            if Label[j] == i:
+                D = np.append(D,Data[j,:])
+                num += 1
+        numSamples[i] = num
+        D = np.reshape(D,(-1,n))
+        newMeanVec[i,:] = np.mean(D,axis=0)
+        #如果本次更新后某一簇中无样本，取上一次均值向量为本次均值向量
+        if num == 0:
+            newMeanVec[i,:] = oldMeanVec[i,:]
+    return newMeanVec,numSamples
+
+if __name__ == '__main__':
+    data = np.loadtxt("Wine.txt",delimiter=',')[:,1:14]
+    Data = preprocessing.scale(data)
+    k = 3
+    global m,n
+    m,n = Data.shape
+    initMeanVec = selectInitMeanVec(Data,k)
+    oldMeanVec = initMeanVec.copy()
+    Label = calcDistance(Data,k,initMeanVec)
+    for i in range(200):
+        newMeanVec,numSamples = updateMeanVec(Data,Label,k,oldMeanVec)
+        oldMeanVec = newMeanVec.copy()
+        Label = calcDistance(Data,k,newMeanVec)
+        print('---第%d轮迭代完成'%(i+1))
+    print(Label)
+    print(numSamples)
+
+    """
+    由于初始均值向量选择的随机性，我们尽管最后得到了0-1-2这三个Label值，我们并不能知道这三个
+    值对应于原本数据的标签的1-2-3中的哪个，但我们知道样本的顺序对应，由于训练数据（原始的带标签
+    数据，尽管标签我们没有用到，只是供测试用）是非常严格的59个1、71个2、48个3，比如我最后程序的
+    输出结果是若干0、若干2、若干1，某些标签中还夹杂着少量其他数据，那么就代表我们的结果中0对应原始
+    数据的标签1、2对应2、1对应3。这是利用已知标签的分类数据来验证我们的聚类程序，由于数据的属性有13
+    个，比较难进行可视化，因此采用这种方式，在查验的时候稍微麻烦一点。
+    根据最后的结果，三类的数量分别是59、71、48，我们的算法聚类后分别是59、65+3+3、48。
+    代表了Class1的59个样本和Class3的48个样本被完全正确归类，Class2对了65个，其余6个被误分至其他类。
+    总体来看，178个样本只有6个被错误聚类。效果突出。
+    """
